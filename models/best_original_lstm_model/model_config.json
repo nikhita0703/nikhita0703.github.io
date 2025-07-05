@@ -1,0 +1,25 @@
+{
+  "model_name": "best_original_lstm_model",
+  "model_type": "simplified",
+  "input_shape": [
+    18,
+    9
+  ],
+  "output_shape": [
+    6
+  ],
+  "architecture": "LSTM",
+  "layer_count": 14,
+  "total_parameters": 512902,
+  "features": [
+    "normalized_price",
+    "ma_3",
+    "ma_6",
+    "ma_12",
+    "returns",
+    "volatility",
+    "month_sin",
+    "month_cos",
+    "year_trend"
+  ]
+}

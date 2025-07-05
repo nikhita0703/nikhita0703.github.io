@@ -162,105 +162,147 @@ def create_food_price_data():
         }
 
 def save_converted_models(pytorch_models, scalers):
-    """Save converted models and metadata"""
-    print("\n💾 Saving Converted Models...")
+    """Save converted models and metadata for each model in separate subfolders"""
+    print("\n💾 Saving All Models to Separate Subfolders...")
     
-    # Select the best model (improved LSTM if available)
-    best_model_key = None
-    if 'best_improved_lstm_model' in pytorch_models:
-        best_model_key = 'best_improved_lstm_model'
-    elif 'best_original_lstm_model' in pytorch_models:
-        best_model_key = 'best_original_lstm_model'
-    elif 'ts_transformer' in pytorch_models:
-        best_model_key = 'ts_transformer'
-    else:
-        print("❌ No suitable model found")
-        return
+    available_models = []
     
-    best_model = pytorch_models[best_model_key]
-    print(f"🎯 Using {best_model_key} as primary model")
+    # Common features for all models
+    common_features = [
+        'normalized_price', 'ma_3', 'ma_6', 'ma_12', 'returns',
+        'volatility', 'month_sin', 'month_cos', 'year_trend'
+    ]
     
-    # Extract weights
-    weights, layer_info = extract_model_weights(best_model['state_dict'])
-    
-    # Create main model JSON
-    main_model = {
-        'model_name': best_model_key,
-        'model_type': 'pytorch_converted',
-        'source_file': best_model['file'],
-        'input_shape': [18, 9],  # 18 timesteps, 9 features
-        'output_shape': [6],     # 6 month prediction
-        'architecture': {
-            'type': 'LSTM' if 'lstm' in best_model_key.lower() else 'Transformer',
-            'layers': layer_info
-        },
-        'weights': weights,
-        'training_history': best_model['history'],
-        'features': [
-            'normalized_price', 'ma_3', 'ma_6', 'ma_12', 'returns',
-            'volatility', 'month_sin', 'month_cos', 'year_trend'
-        ]
-    }
-    
-    # Save main model
-    with open('models/pytorch_model.json', 'w') as f:
-        json.dump(main_model, f, indent=2)
-    print(f"✅ Saved pytorch_model.json ({len(json.dumps(main_model)) / 1024:.1f} KB)")
-    
-    # Create simplified model for faster loading
-    simplified_model = {
-        'model_name': best_model_key,
-        'model_type': 'simplified',
-        'input_shape': [18, 9],
-        'output_shape': [6],
-        'architecture': main_model['architecture']['type'],
-        'layer_count': len(layer_info),
-        'total_parameters': sum(len(w['values']) for w in weights.values()),
-        'features': main_model['features']
-    }
-    
-    with open('models/model_config.json', 'w') as f:
-        json.dump(simplified_model, f, indent=2)
-    print("✅ Saved model_config.json")
-    
-    # Save metadata
-    metadata = {
-        'created_from': 'pytorch_models',
-        'source_models': list(pytorch_models.keys()),
-        'primary_model': best_model_key,
-        'model_format': 'pytorch_converted',
-        'input_shape': [18, 9],
-        'output_shape': [6],
-        'sequence_length': 18,
-        'prediction_horizon': 6,
-        'features': main_model['features'],
-        'food_items': {code: info['name'] for code, info in scalers.items()},
-        'training_info': {
-            'history_available': best_model['history'] is not None,
-            'model_file': best_model['file']
+    # Process each model
+    for model_key, model_data in pytorch_models.items():
+        print(f"\n🔧 Processing {model_key}...")
+        
+        # Create subfolder for this model
+        model_folder = f'models/{model_key}'
+        os.makedirs(model_folder, exist_ok=True)
+        
+        # Extract weights
+        weights, layer_info = extract_model_weights(model_data['state_dict'])
+        
+        # Determine model type
+        if 'lstm' in model_key.lower():
+            model_type = 'LSTM'
+            display_name = model_key.replace('_', ' ').title()
+        elif 'transformer' in model_key.lower():
+            model_type = 'Transformer'
+            display_name = 'Time Series Transformer'
+        else:
+            model_type = 'Neural Network'
+            display_name = model_key.replace('_', ' ').title()
+        
+        # Create main model JSON
+        main_model = {
+            'model_name': model_key,
+            'model_type': 'pytorch_converted',
+            'source_file': model_data['file'],
+            'input_shape': [18, 9],  # 18 timesteps, 9 features
+            'output_shape': [6],     # 6 month prediction
+            'architecture': {
+                'type': model_type,
+                'layers': layer_info
+            },
+            'weights': weights,
+            'training_history': model_data['history'],
+            'features': common_features
         }
+        
+        # Save main model
+        model_file = f'{model_folder}/pytorch_model.json'
+        with open(model_file, 'w') as f:
+            json.dump(main_model, f, indent=2)
+        
+        model_size_kb = len(json.dumps(main_model)) / 1024
+        print(f"  ✅ Saved {model_key}/pytorch_model.json ({model_size_kb:.1f} KB)")
+        
+        # Create simplified model config
+        simplified_model = {
+            'model_name': model_key,
+            'model_type': 'simplified',
+            'input_shape': [18, 9],
+            'output_shape': [6],
+            'architecture': model_type,
+            'layer_count': len(layer_info),
+            'total_parameters': sum(len(w['values']) for w in weights.values()),
+            'features': common_features
+        }
+        
+        with open(f'{model_folder}/model_config.json', 'w') as f:
+            json.dump(simplified_model, f, indent=2)
+        print(f"  ✅ Saved {model_key}/model_config.json")
+        
+        # Save model-specific metadata
+        metadata = {
+            'created_from': 'pytorch_models',
+            'model_name': model_key,
+            'display_name': display_name,
+            'model_format': 'pytorch_converted',
+            'architecture_type': model_type,
+            'input_shape': [18, 9],
+            'output_shape': [6],
+            'sequence_length': 18,
+            'prediction_horizon': 6,
+            'features': common_features,
+            'food_items': {code: info['name'] for code, info in scalers.items()},
+            'training_info': {
+                'history_available': model_data['history'] is not None,
+                'model_file': model_data['file'],
+                'total_parameters': simplified_model['total_parameters'],
+                'layer_count': len(layer_info)
+            }
+        }
+        
+        with open(f'{model_folder}/model_metadata.json', 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"  ✅ Saved {model_key}/model_metadata.json")
+        
+        # Save scalers (same for all models)
+        with open(f'{model_folder}/scalers.json', 'w') as f:
+            json.dump(scalers, f, indent=2)
+        print(f"  ✅ Saved {model_key}/scalers.json")
+        
+        # Create sample prediction function weights (for demo)
+        prediction_weights = {
+            'input_transform': np.random.randn(9, 32).tolist(),
+            'hidden_weights': np.random.randn(32, 32).tolist(),
+            'output_transform': np.random.randn(32, 6).tolist(),
+            'bias': np.random.randn(6).tolist()
+        }
+        
+        with open(f'{model_folder}/prediction_weights.json', 'w') as f:
+            json.dump(prediction_weights, f, indent=2)
+        print(f"  ✅ Saved {model_key}/prediction_weights.json")
+        
+        # Add to available models list
+        available_models.append({
+            'id': model_key,
+            'name': display_name,
+            'type': model_type,
+            'folder': model_key,
+            'parameters': simplified_model['total_parameters'],
+            'layers': len(layer_info),
+            'has_history': model_data['history'] is not None,
+            'source_file': model_data['file']
+        })
+    
+    # Create models index file
+    models_index = {
+        'available_models': available_models,
+        'default_model': available_models[0]['id'] if available_models else None,
+        'total_models': len(available_models),
+        'features': common_features,
+        'input_shape': [18, 9],
+        'output_shape': [6],
+        'food_items': {code: info['name'] for code, info in scalers.items()}
     }
     
-    with open('models/model_metadata.json', 'w') as f:
-        json.dump(metadata, f, indent=2)
-    print("✅ Saved model_metadata.json")
-    
-    # Save scalers
-    with open('models/scalers.json', 'w') as f:
-        json.dump(scalers, f, indent=2)
-    print("✅ Saved scalers.json")
-    
-    # Create sample prediction function weights (for demo)
-    prediction_weights = {
-        'input_transform': np.random.randn(9, 32).tolist(),
-        'hidden_weights': np.random.randn(32, 32).tolist(),
-        'output_transform': np.random.randn(32, 6).tolist(),
-        'bias': np.random.randn(6).tolist()
-    }
-    
-    with open('models/prediction_weights.json', 'w') as f:
-        json.dump(prediction_weights, f, indent=2)
-    print("✅ Saved prediction_weights.json")
+    with open('models/models_index.json', 'w') as f:
+        json.dump(models_index, f, indent=2)
+    print(f"\n✅ Saved models_index.json with {len(available_models)} available models")
 
 def main():
     """Main execution function"""
@@ -284,16 +326,19 @@ def main():
     
     print("\n🎉 Model Conversion Complete!")
     print("📁 Files created in models/ directory:")
-    print("   ├── pytorch_model.json       (Full converted model)")
-    print("   ├── model_config.json        (Simplified configuration)")
-    print("   ├── model_metadata.json      (Model metadata)")
-    print("   ├── scalers.json             (Price scaling information)")
-    print("   └── prediction_weights.json  (Prediction function weights)")
+    print("   ├── models_index.json        (Available models list)")
+    for model_key in pytorch_models.keys():
+        print(f"   ├── {model_key}/")
+        print(f"   │   ├── pytorch_model.json")
+        print(f"   │   ├── model_config.json")
+        print(f"   │   ├── model_metadata.json")
+        print(f"   │   ├── scalers.json")
+        print(f"   │   └── prediction_weights.json")
     
     print(f"\n📊 Conversion Summary:")
     print(f"   • Source models: {len(pytorch_models)}")
     print(f"   • Food items: {len(scalers)}")
-    print(f"   • Primary model: {list(pytorch_models.keys())[0] if pytorch_models else 'None'}")
+    print(f"   • Available models: {', '.join(pytorch_models.keys())}")
     
     print("\n🌐 Ready for web application!")
     print("💡 To start the web server:")

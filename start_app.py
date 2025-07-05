@@ -12,7 +12,6 @@ import threading
 
 def start_server():
     """Start the HTTP server"""
-    os.chdir('app')
     port = 8000
     server_address = ('', port)
     
@@ -37,9 +36,9 @@ def main():
     print("=" * 60)
     
     # Check if model files exist
-    if not os.path.exists('models/model_metadata.json'):
+    if not os.path.exists('models/models_index.json'):
         print("❌ Model files not found!")
-        print("💡 Please run: python ../create_models_from_pkl.py")
+        print("💡 Please run: python create_models_from_pkl.py")
         return
     
     print("✅ Model files found")

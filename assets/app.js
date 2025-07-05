@@ -12,6 +12,8 @@ class FoodPricePredictor {
         this.predictionWeights = null;
         this.isLoaded = false;
         this.predictionChart = null;
+        this.availableModels = [];
+        this.selectedModel = null;
         
         // Initialize the application
         this.init();
@@ -20,45 +22,90 @@ class FoodPricePredictor {
     async init() {
         console.log('Initializing Food Price Predictor with PyTorch Models...');
         
-        // Load converted PyTorch models and assets
+        // Load models index and setup UI
         try {
-            await this.loadPyTorchModels();
+            await this.loadModelsIndex();
             this.setupEventListeners();
             this.generatePriceInputs();
-            this.updateModelStatus('ready', '✅ PyTorch Models Ready');
+            this.updateModelStatus('loading', '🔄 Select a model to continue...');
         } catch (error) {
             console.error('Error initializing:', error);
-            this.updateModelStatus('error', '❌ Failed to load PyTorch models');
+            this.updateModelStatus('error', '❌ Failed to load models index');
         }
     }
 
-    async loadPyTorchModels() {
-        console.log('Loading converted PyTorch models...');
+    async loadModelsIndex() {
+        console.log('Loading models index...');
         
         try {
+            const indexResponse = await fetch('./models/models_index.json');
+            const modelsIndex = await indexResponse.json();
+            
+            this.availableModels = modelsIndex.available_models;
+            console.log('Available models:', this.availableModels);
+            
+            this.populateModelSelector();
+            
+            // Auto-select default model if available
+            if (modelsIndex.default_model) {
+                this.selectedModel = modelsIndex.default_model;
+                document.getElementById('modelSelector').value = this.selectedModel;
+                await this.loadSelectedModel();
+            }
+            
+        } catch (error) {
+            console.error('Error loading models index:', error);
+            this.updateModelStatus('error', '❌ Failed to load models index');
+        }
+    }
+    
+    populateModelSelector() {
+        const modelSelector = document.getElementById('modelSelector');
+        modelSelector.innerHTML = '<option value="">Choose a model...</option>';
+        
+        this.availableModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.name} (${model.type}) - ${model.parameters.toLocaleString()} params`;
+            modelSelector.appendChild(option);
+        });
+    }
+
+    async loadSelectedModel() {
+        if (!this.selectedModel) {
+            this.updateModelStatus('error', '❌ No model selected');
+            return;
+        }
+        
+        console.log(`Loading model: ${this.selectedModel}...`);
+        this.updateModelStatus('loading', '🔄 Loading selected model...');
+        
+        try {
+            const modelFolder = `./models/${this.selectedModel}`;
+            
             // Load model configuration (lightweight)
-            const configResponse = await fetch('./models/model_config.json');
+            const configResponse = await fetch(`${modelFolder}/model_config.json`);
             this.modelConfig = await configResponse.json();
             console.log('Model config loaded:', this.modelConfig);
             
             // Load metadata
-            const metadataResponse = await fetch('./models/model_metadata.json');
+            const metadataResponse = await fetch(`${modelFolder}/model_metadata.json`);
             this.metadata = await metadataResponse.json();
             console.log('Metadata loaded:', this.metadata);
             
             // Load scalers
-            const scalersResponse = await fetch('./models/scalers.json');
+            const scalersResponse = await fetch(`${modelFolder}/scalers.json`);
             this.scalers = await scalersResponse.json();
             console.log('Scalers loaded:', this.scalers);
             
             // Load prediction weights (simplified weights for inference)
-            const weightsResponse = await fetch('./models/prediction_weights.json');
+            const weightsResponse = await fetch(`${modelFolder}/prediction_weights.json`);
             this.predictionWeights = await weightsResponse.json();
             console.log('Prediction weights loaded');
             
             // Optionally load full PyTorch model (for advanced features)
             try {
-                const pytorchResponse = await fetch('./models/pytorch_model.json');
+                const pytorchResponse = await fetch(`${modelFolder}/pytorch_model.json`);
                 if (pytorchResponse.ok) {
                     this.pytorchModel = await pytorchResponse.json();
                     console.log('Full PyTorch model loaded:', this.pytorchModel.model_name);
@@ -68,9 +115,13 @@ class FoodPricePredictor {
             }
             
             this.isLoaded = true;
+            this.updateModelStatus('ready', '✅ Model Ready');
             
         } catch (error) {
-            console.warn('Using fallback models');
+            console.error('Error loading selected model:', error);
+            this.updateModelStatus('error', '❌ Failed to load selected model');
+            
+            // Fallback to default data
             this.metadata = this.getDefaultMetadata();
             this.scalers = this.getDefaultScalers();
             this.isLoaded = true;
@@ -122,8 +173,8 @@ class FoodPricePredictor {
         
         // Add model information to the status
         let modelInfo = '';
-        if (this.modelConfig && status === 'ready') {
-            modelInfo = ` (${this.modelConfig.model_name} - ${this.modelConfig.architecture})`;
+        if (this.selectedModel && this.metadata && status === 'ready') {
+            modelInfo = ` (${this.metadata.display_name} - ${this.metadata.architecture_type})`;
         }
         
         statusIndicator.innerHTML = `
@@ -136,10 +187,24 @@ class FoodPricePredictor {
         } else if (status === 'error') {
             statusElement.style.background = 'rgba(220, 53, 69, 0.1)';
             statusElement.style.borderLeft = '4px solid #dc3545';
+        } else if (status === 'loading') {
+            statusElement.style.background = 'rgba(255, 193, 7, 0.1)';
+            statusElement.style.borderLeft = '4px solid #ffc107';
         }
     }
 
     setupEventListeners() {
+        // Model selection
+        document.getElementById('modelSelector').addEventListener('change', async (e) => {
+            this.selectedModel = e.target.value;
+            if (this.selectedModel) {
+                await this.loadSelectedModel();
+            } else {
+                this.isLoaded = false;
+                this.updateModelStatus('loading', '🔄 Select a model to continue...');
+            }
+        });
+
         // Food item selection
         document.getElementById('foodItem').addEventListener('change', (e) => {
             this.handleFoodItemChange(e.target.value);
@@ -279,8 +344,13 @@ class FoodPricePredictor {
     }
 
     async makePrediction() {
+        if (!this.selectedModel) {
+            alert('Please select a model first');
+            return;
+        }
+
         if (!this.isLoaded) {
-            alert('Models are not loaded yet. Please wait...');
+            alert('Selected model is not loaded yet. Please wait...');
             return;
         }
 
@@ -314,7 +384,7 @@ class FoodPricePredictor {
 
     pytorchModelPredict(features, foodItem) {
         // Use the converted PyTorch model for prediction
-        console.log('Making prediction with PyTorch model...');
+        console.log(`Making prediction with ${this.metadata?.display_name || 'PyTorch model'}...`);
         
         const lastFeatures = features[features.length - 1];
         const basePrice = parseFloat(document.getElementById('currentPrice').value || '0');
@@ -487,7 +557,7 @@ class FoodPricePredictor {
                     fill: true,
                     tension: 0.4
                 }, {
-                    label: 'PyTorch Model Predictions',
+                    label: `${this.metadata?.display_name || 'PyTorch Model'} Predictions`,
                     data: predictedData,
                     borderColor: '#764ba2',
                     backgroundColor: 'rgba(118, 75, 162, 0.1)',
@@ -517,7 +587,7 @@ class FoodPricePredictor {
                 plugins: {
                     title: {
                         display: true,
-                        text: `${this.scalers[foodItem].name} Price Forecast (PyTorch Model)`
+                        text: `${this.scalers[foodItem].name} Price Forecast (${this.metadata?.display_name || 'PyTorch Model'})`
                     },
                     legend: {
                         display: true,
@@ -532,17 +602,18 @@ class FoodPricePredictor {
         const modelDetails = document.getElementById('modelDetails');
         const itemName = this.scalers[foodItem].name;
         
-        let modelName = 'PyTorch Ensemble Model';
+        let modelName = 'PyTorch Model';
         let modelArchitecture = 'LSTM';
         let trainingInfo = 'Converted from PyTorch';
+        let totalParameters = 'N/A';
         
-        if (this.modelConfig) {
-            modelName = this.modelConfig.model_name;
-            modelArchitecture = this.modelConfig.architecture;
-        }
-        
-        if (this.metadata && this.metadata.training_info) {
-            trainingInfo = `Source: ${this.metadata.training_info.model_file}`;
+        if (this.metadata) {
+            modelName = this.metadata.display_name || this.metadata.model_name;
+            modelArchitecture = this.metadata.architecture_type;
+            if (this.metadata.training_info) {
+                trainingInfo = `Source: ${this.metadata.training_info.model_file}`;
+                totalParameters = this.metadata.training_info.total_parameters?.toLocaleString() || 'N/A';
+            }
         }
         
         modelDetails.innerHTML = `
@@ -551,12 +622,16 @@ class FoodPricePredictor {
                 <p>${itemName}</p>
             </div>
             <div class="model-detail-item">
+                <h4>Selected Model</h4>
+                <p>${modelName}</p>
+            </div>
+            <div class="model-detail-item">
                 <h4>Model Architecture</h4>
                 <p>${modelArchitecture}</p>
             </div>
             <div class="model-detail-item">
-                <h4>Model Source</h4>
-                <p>${modelName}</p>
+                <h4>Model Parameters</h4>
+                <p>${totalParameters}</p>
             </div>
             <div class="model-detail-item">
                 <h4>Prediction Horizon</h4>
