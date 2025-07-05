@@ -1,0 +1,46 @@
+{
+  "created_from": "pytorch_models",
+  "source_models": [
+    "best_improved_lstm_model",
+    "best_original_lstm_model",
+    "ts_transformer"
+  ],
+  "primary_model": "best_improved_lstm_model",
+  "model_format": "pytorch_converted",
+  "input_shape": [
+    18,
+    9
+  ],
+  "output_shape": [
+    6
+  ],
+  "sequence_length": 18,
+  "prediction_horizon": 6,
+  "features": [
+    "normalized_price",
+    "ma_3",
+    "ma_6",
+    "ma_12",
+    "returns",
+    "volatility",
+    "month_sin",
+    "month_cos",
+    "year_trend"
+  ],
+  "food_items": {
+    "711211": "Bananas",
+    "706111": "Chicken (whole)",
+    "709112": "Milk (gallon)",
+    "708111": "Eggs (dozen)",
+    "702111": "Bread (white)",
+    "704111": "Bacon",
+    "703111": "Ground Beef",
+    "711311": "Oranges",
+    "712112": "Potatoes",
+    "717311": "Coffee"
+  },
+  "training_info": {
+    "history_available": true,
+    "model_file": "best_improved_lstm_model.pth"
+  }
+}
