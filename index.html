@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Food Price Predictor - AI Ensemble Model</title>
+    <title>Grocery Price Predictor - AI Ensemble Model</title>
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Food Price Predictor</h1>
-            <p>AI-powered price forecasting using ensemble LSTM models</p>
+            <h1>Grocery Price Predictor</h1>
+            <p>Price forecasting using ensemble LSTM models</p>
         </header>
 
         <div class="model-status" id="modelStatus">
@@ -25,16 +25,23 @@
             <section class="input-section">
                 <h2>Price Input</h2>
                 <div class="form-group">
-                    <label for="modelSelector">Select AI Model:</label>
+                    <label for="modelSelector">Select Model:</label>
                     <select id="modelSelector" class="form-control">
                         <option value="">Loading models...</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="foodItem">Select Food Item:</label>
-                    <select id="foodItem" class="form-control">
+                    <label for="foodItem">Select Food Items:</label>
+                    <select id="foodItem" class="form-control" multiple size="8">
                         <option value="">Loading food items...</option>
                     </select>
+                    <p class="form-help">Hold Ctrl/Cmd to select multiple items. Historical data will show for the last selected item.</p>
+                </div>
+
+                <div class="selected-items-container" id="selectedItemsContainer" style="display: none;">
+                    <h4>🛒 Selected Items:</h4>
+                    <div class="selected-items-list" id="selectedItemsList"></div>
+                    <button id="clearSelectionBtn" class="btn btn-secondary btn-small">Clear All</button>
                 </div>
 
                 <div class="form-group">
@@ -82,7 +89,7 @@
         </main>
 
         <footer>
-            <p>&copy; 2024 Food Price Predictor - Powered by TensorFlow.js & Ensemble Learning</p>
+            <p>&copy; 2024 Grocery Price Predictor - Powered by TensorFlow.js & Ensemble Learning</p>
         </footer>
     </div>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Food Price Predictor - Web Application Startup Script
-This script starts the web server for the food price prediction application.
+Grocery Price Predictor - Web Application Startup Script
+This script starts the web server for the grocery price prediction application.
 """
 
 import os
@@ -21,7 +21,7 @@ def start_server():
     
     httpd = HTTPServer(server_address, MyHandler)
     print(f"Server running at http://localhost:{port}")
-    print("Food Price Predictor is ready!")
+    print("Grocery Price Predictor is ready!")
     print("Press Ctrl+C to stop the server")
     
     try:
@@ -32,7 +32,7 @@ def start_server():
 
 def main():
     """Main function"""
-    print("Starting Food Price Predictor Web Application")
+    print("Starting Grocery Price Predictor Web Application")
     print("=" * 60)
     
     # Check if model files exist

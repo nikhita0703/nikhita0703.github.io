@@ -1,5 +1,5 @@
 /**
- * Food Price Predictor - PyTorch Model Integration
+ * Grocery Price Predictor - PyTorch Model Integration
  * AI-powered price forecasting using converted PyTorch models
  */
 
@@ -14,13 +14,15 @@ class FoodPricePredictor {
         this.predictionChart = null;
         this.availableModels = [];
         this.selectedModel = null;
+        this.selectedFoodItems = new Set();
+        this.lastSelectedItem = null;
         
         // Initialize the application
         this.init();
     }
 
     async init() {
-        console.log('Initializing Food Price Predictor with PyTorch Models...');
+        console.log('Initializing Grocery Price Predictor with PyTorch Models...');
         
         // Load models index and setup UI
         try {
@@ -118,6 +120,9 @@ class FoodPricePredictor {
             
             this.isLoaded = true;
             this.updateModelStatus('ready', 'Model Ready');
+            
+            // Update predict button state in case items are already selected
+            this.updatePredictButtonState();
             
         } catch (error) {
             console.error('Error loading selected model:', error);
@@ -227,9 +232,14 @@ class FoodPricePredictor {
             }
         });
 
-        // Food item selection
+        // Food item multi-selection
         document.getElementById('foodItem').addEventListener('change', (e) => {
-            this.handleFoodItemChange(e.target.value);
+            this.handleMultipleFoodItemChange(e);
+        });
+
+        // Clear selection button
+        document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+            this.clearAllSelections();
         });
 
         // Predict button
@@ -318,14 +328,120 @@ class FoodPricePredictor {
         console.log(`Displayed ${historicalPrices.length} months of historical data for ${scaler.name}`);
     }
 
-    handleFoodItemChange(itemCode) {
-        if (!itemCode || !this.scalers[itemCode]) return;
-
-        // Display the historical data for the selected food item
-        this.displayHistoricalData(itemCode);
+    handleMultipleFoodItemChange(event) {
+        const selectedOptions = Array.from(event.target.selectedOptions);
+        const newSelectedItems = selectedOptions.map(option => option.value).filter(value => value !== '');
         
-        // Store the selected item for predictions
-        this.selectedFoodItem = itemCode;
+        // Update selected items set
+        this.selectedFoodItems.clear();
+        newSelectedItems.forEach(item => this.selectedFoodItems.add(item));
+        
+        // Update last selected item for historical data display
+        if (newSelectedItems.length > 0) {
+            this.lastSelectedItem = newSelectedItems[newSelectedItems.length - 1];
+            this.displayHistoricalData(this.lastSelectedItem);
+        } else {
+            this.lastSelectedItem = null;
+            this.displayHistoricalData(null);
+        }
+        
+        // Update selected items display
+        this.updateSelectedItemsDisplay();
+        
+        // Update predict button state
+        this.updatePredictButtonState();
+    }
+
+    updateSelectedItemsDisplay() {
+        const container = document.getElementById('selectedItemsContainer');
+        const list = document.getElementById('selectedItemsList');
+        
+        if (this.selectedFoodItems.size === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        list.innerHTML = '';
+        
+        // Sort selected items by name for consistent display
+        const sortedItems = Array.from(this.selectedFoodItems).sort((a, b) => 
+            this.scalers[a].name.localeCompare(this.scalers[b].name)
+        );
+        
+        sortedItems.forEach(itemCode => {
+            const scaler = this.scalers[itemCode];
+            const currentPrice = scaler.current_price || scaler.mean;
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'selected-item';
+            itemDiv.innerHTML = `
+                <div class="selected-item-info">
+                    <div class="selected-item-name">${scaler.name}</div>
+                    <div class="selected-item-price">Current: $${currentPrice.toFixed(2)}</div>
+                </div>
+                <button class="remove-item-btn" onclick="foodPredictor.removeSelectedItem('${itemCode}')">×</button>
+            `;
+            list.appendChild(itemDiv);
+        });
+        
+        console.log(`Updated display for ${this.selectedFoodItems.size} selected items`);
+    }
+
+    removeSelectedItem(itemCode) {
+        this.selectedFoodItems.delete(itemCode);
+        
+        // Update the select element
+        const foodSelector = document.getElementById('foodItem');
+        Array.from(foodSelector.options).forEach(option => {
+            if (option.value === itemCode) {
+                option.selected = false;
+            }
+        });
+        
+        // Update last selected item if necessary
+        if (this.lastSelectedItem === itemCode) {
+            const remainingItems = Array.from(this.selectedFoodItems);
+            this.lastSelectedItem = remainingItems.length > 0 ? remainingItems[remainingItems.length - 1] : null;
+            this.displayHistoricalData(this.lastSelectedItem);
+        }
+        
+        this.updateSelectedItemsDisplay();
+        this.updatePredictButtonState();
+    }
+
+    clearAllSelections() {
+        this.selectedFoodItems.clear();
+        this.lastSelectedItem = null;
+        
+        // Clear the select element
+        const foodSelector = document.getElementById('foodItem');
+        Array.from(foodSelector.options).forEach(option => {
+            option.selected = false;
+        });
+        
+        this.displayHistoricalData(null);
+        this.updateSelectedItemsDisplay();
+        this.updatePredictButtonState();
+    }
+
+    updatePredictButtonState() {
+        const predictBtn = document.getElementById('predictBtn');
+        const hasValidItems = this.selectedFoodItems.size > 0 && 
+                             Array.from(this.selectedFoodItems).every(itemCode => {
+                                 const scaler = this.scalers[itemCode];
+                                 return scaler && scaler.latest_18_months && scaler.latest_18_months.length >= 18;
+                             });
+        
+        predictBtn.disabled = !hasValidItems || !this.isLoaded;
+        
+        if (this.selectedFoodItems.size === 0) {
+            predictBtn.textContent = '🔮 Predict Future Prices';
+        } else if (this.selectedFoodItems.size === 1) {
+            predictBtn.textContent = '🔮 Predict Future Price';
+        } else {
+            predictBtn.textContent = `🔮 Predict Total Cost (${this.selectedFoodItems.size} items)`;
+        }
     }
 
 
@@ -403,32 +519,48 @@ class FoodPricePredictor {
             return;
         }
 
-        const foodItem = document.getElementById('foodItem').value;
-        if (!foodItem) {
-            alert('Please select a food item');
+        if (this.selectedFoodItems.size === 0) {
+            alert('Please select at least one food item');
             return;
         }
 
-        const scaler = this.scalers[foodItem];
-        if (!scaler || !scaler.latest_18_months || scaler.latest_18_months.length < 18) {
-            alert('Insufficient historical data for this food item. Please select another item.');
+        const itemPredictions = new Map();
+        const itemData = new Map();
+        
+        console.log(`Making predictions for ${this.selectedFoodItems.size} selected items`);
+
+        // Generate predictions for each selected item
+        for (const itemCode of this.selectedFoodItems) {
+            const scaler = this.scalers[itemCode];
+            
+            if (!scaler || !scaler.latest_18_months || scaler.latest_18_months.length < 18) {
+                console.warn(`Insufficient data for ${scaler?.name || itemCode}, skipping`);
+                continue;
+            }
+
+            // Use the loaded historical data
+            const prices = scaler.latest_18_months;
+            const dates = scaler.latest_dates;
+
+            console.log(`Processing ${scaler.name} with ${prices.length} months of data`);
+
+            // Generate features from historical data
+            const features = this.createFeaturesFromPrices(prices, dates);
+            
+            // Make prediction using converted PyTorch model
+            const predictions = this.pytorchModelPredict(features, itemCode);
+            
+            itemPredictions.set(itemCode, predictions);
+            itemData.set(itemCode, { prices, dates, scaler });
+        }
+
+        if (itemPredictions.size === 0) {
+            alert('No valid predictions could be generated. Please check your selected items.');
             return;
         }
 
-        // Use the loaded historical data
-        const prices = scaler.latest_18_months;
-        const dates = scaler.latest_dates;
-
-        console.log(`Making prediction for ${scaler.name} using ${prices.length} months of historical data`);
-
-        // Generate features from historical data
-        const features = this.createFeaturesFromPrices(prices, dates);
-        
-        // Make prediction using converted PyTorch model
-        const predictions = this.pytorchModelPredict(features, foodItem);
-        
         // Display results
-        this.displayResults(predictions, foodItem, prices);
+        this.displayMultipleResults(itemPredictions, itemData);
     }
 
     pytorchModelPredict(features, foodItem) {
@@ -500,10 +632,23 @@ class FoodPricePredictor {
         return result;
     }
 
-    displayResults(predictions, foodItem, historicalPrices) {
+    displayMultipleResults(itemPredictions, itemData) {
         const resultsSection = document.getElementById('resultsSection');
         resultsSection.style.display = 'block';
         
+        if (itemPredictions.size === 1) {
+            // Single item - use existing display logic
+            const [itemCode] = itemPredictions.keys();
+            const predictions = itemPredictions.get(itemCode);
+            const { prices } = itemData.get(itemCode);
+            this.displaySingleItemResults(predictions, itemCode, prices);
+        } else {
+            // Multiple items - show combined results
+            this.displayCombinedResults(itemPredictions, itemData);
+        }
+    }
+
+    displaySingleItemResults(predictions, foodItem, historicalPrices) {
         // Update prediction list
         const predictionList = document.getElementById('predictionList');
         predictionList.innerHTML = '';
@@ -530,6 +675,100 @@ class FoodPricePredictor {
         
         // Update model information
         this.updateModelInfo(foodItem);
+    }
+
+    displayCombinedResults(itemPredictions, itemData) {
+        const predictionList = document.getElementById('predictionList');
+        predictionList.innerHTML = '';
+        
+        // Calculate total costs for each month
+        const currentDate = new Date();
+        const totalPredictions = [];
+        const currentTotalCost = Array.from(this.selectedFoodItems).reduce((total, itemCode) => {
+            const { scaler } = itemData.get(itemCode);
+            return total + (scaler.current_price || scaler.mean);
+        }, 0);
+        
+        for (let monthIndex = 0; monthIndex < 6; monthIndex++) {
+            let monthlyTotal = 0;
+            
+            // Sum predictions for all items for this month
+            for (const [itemCode, predictions] of itemPredictions) {
+                monthlyTotal += predictions[monthIndex];
+            }
+            
+            totalPredictions.push(monthlyTotal);
+            
+            const futureDate = new Date(currentDate);
+            futureDate.setMonth(currentDate.getMonth() + monthIndex + 1);
+            
+            const predictionItem = document.createElement('div');
+            predictionItem.className = 'prediction-item total-prediction';
+            predictionItem.innerHTML = `
+                <span class="prediction-month">${futureDate.toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</span>
+                <span class="prediction-price">$${monthlyTotal.toFixed(2)}</span>
+            `;
+            predictionList.appendChild(predictionItem);
+        }
+        
+        // Add individual item breakdown
+        const breakdownDiv = document.createElement('div');
+        breakdownDiv.className = 'items-breakdown';
+        breakdownDiv.innerHTML = '<h4>📋 Individual Items Breakdown:</h4>';
+        
+        for (const [itemCode, predictions] of itemPredictions) {
+            const { scaler } = itemData.get(itemCode);
+            const avgPrediction = predictions.reduce((sum, price) => sum + price, 0) / predictions.length;
+            
+            const itemBreakdown = document.createElement('div');
+            itemBreakdown.className = 'breakdown-item';
+            itemBreakdown.innerHTML = `
+                <span class="breakdown-name">${scaler.name}</span>
+                <span class="breakdown-price">Avg: $${avgPrediction.toFixed(2)}</span>
+            `;
+            breakdownDiv.appendChild(itemBreakdown);
+        }
+        predictionList.appendChild(breakdownDiv);
+        
+        // Add total cost display
+        this.displayTotalCostSummary(currentTotalCost, totalPredictions);
+        
+        // Update trend analysis for totals
+        this.updateTrendAnalysis(totalPredictions);
+        
+        // Update chart with combined data
+        this.updateCombinedChart(itemPredictions, itemData);
+        
+        // Update model information for multiple items
+        this.updateMultipleItemsModelInfo(itemPredictions.size);
+    }
+
+    displayTotalCostSummary(currentTotal, predictedTotals) {
+        const averagePredicted = predictedTotals.reduce((sum, total) => sum + total, 0) / predictedTotals.length;
+        const change = ((averagePredicted - currentTotal) / currentTotal) * 100;
+        const changeClass = change > 0 ? 'text-danger' : change < 0 ? 'text-success' : 'text-warning';
+        const changeIcon = change > 0 ? '📈' : change < 0 ? '📉' : '➡️';
+        
+        // Insert total cost display before trend analysis
+        const trendCard = document.querySelector('.prediction-card:last-child');
+        const totalCostDiv = document.createElement('div');
+        totalCostDiv.className = 'total-cost-display';
+        totalCostDiv.innerHTML = `
+            <h3>💰 Total Cost Forecast</h3>
+            <div class="total-cost-current">Current Total: $${currentTotal.toFixed(2)}</div>
+            <div class="total-cost-predicted">6-Month Average: $${averagePredicted.toFixed(2)}</div>
+            <div class="total-cost-change ${changeClass}">
+                ${changeIcon} Expected Change: ${change > 0 ? '+' : ''}${change.toFixed(1)}%
+            </div>
+        `;
+        
+        // Remove existing total cost display if it exists
+        const existingTotal = document.querySelector('.total-cost-display');
+        if (existingTotal) {
+            existingTotal.remove();
+        }
+        
+        trendCard.parentNode.insertBefore(totalCostDiv, trendCard);
     }
 
     updateTrendAnalysis(predictions) {
@@ -647,6 +886,233 @@ class FoodPricePredictor {
         });
     }
 
+    updateCombinedChart(itemPredictions, itemData) {
+        const ctx = document.getElementById('predictionChart').getContext('2d');
+        
+        // Prepare data for combined chart including historical data
+        const currentDate = new Date();
+        const labels = [];
+        
+        // Get historical data length (assuming all items have same length)
+        const firstItemData = Array.from(itemData.values())[0];
+        const historicalLength = firstItemData.prices.length;
+        
+        // Create labels for historical data
+        for (let i = 0; i < historicalLength; i++) {
+            const date = new Date(currentDate);
+            date.setMonth(currentDate.getMonth() - (historicalLength - 1 - i));
+            labels.push(date.toLocaleDateString('en-US', {month: 'short', year: 'numeric'}));
+        }
+        
+        // Create labels for predicted data
+        for (let i = 1; i <= 6; i++) {
+            const date = new Date(currentDate);
+            date.setMonth(currentDate.getMonth() + i);
+            labels.push(date.toLocaleDateString('en-US', {month: 'short', year: 'numeric'}));
+        }
+        
+        // Create datasets for each item and total
+        const datasets = [];
+        const colors = ['#667eea', '#764ba2', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#e83e8c'];
+        let colorIndex = 0;
+        
+        // Add individual item datasets (historical + predicted)
+        for (const [itemCode, predictions] of itemPredictions) {
+            const { scaler, prices } = itemData.get(itemCode);
+            const color = colors[colorIndex % colors.length];
+            
+            // Combine historical and predicted data
+            const historicalData = [...prices, ...Array(6).fill(null)];
+            const predictedData = [...Array(historicalLength).fill(null), ...predictions];
+            
+            // Historical dataset
+            datasets.push({
+                label: `${scaler.name} (Historical)`,
+                data: historicalData,
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: false,
+                tension: 0.4,
+                pointRadius: 3
+            });
+            
+            // Predicted dataset
+            datasets.push({
+                label: `${scaler.name} (Predicted)`,
+                data: predictedData,
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: false,
+                tension: 0.4,
+                borderDash: [5, 5],
+                pointRadius: 4
+            });
+            
+            colorIndex++;
+        }
+        
+        // Calculate total cost datasets (historical + predicted)
+        const historicalTotals = [];
+        const predictedTotals = [];
+        
+        // Calculate historical totals
+        for (let monthIndex = 0; monthIndex < historicalLength; monthIndex++) {
+            let monthlyTotal = 0;
+            for (const [itemCode, predictions] of itemPredictions) {
+                const { prices } = itemData.get(itemCode);
+                monthlyTotal += prices[monthIndex];
+            }
+            historicalTotals.push(monthlyTotal);
+        }
+        
+        // Calculate predicted totals
+        for (let monthIndex = 0; monthIndex < 6; monthIndex++) {
+            let monthlyTotal = 0;
+            for (const [itemCode, predictions] of itemPredictions) {
+                monthlyTotal += predictions[monthIndex];
+            }
+            predictedTotals.push(monthlyTotal);
+        }
+        
+        // Add total cost datasets
+        const totalHistoricalData = [...historicalTotals, ...Array(6).fill(null)];
+        const totalPredictedData = [...Array(historicalLength).fill(null), ...predictedTotals];
+        
+        datasets.push({
+            label: 'Total Cost (Historical)',
+            data: totalHistoricalData,
+            borderColor: '#000000',
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+            pointRadius: 4
+        });
+        
+        datasets.push({
+            label: 'Total Cost (Predicted)',
+            data: totalPredictedData,
+            borderColor: '#000000',
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            borderDash: [5, 5],
+            pointRadius: 5
+        });
+        
+        // Destroy existing chart if it exists
+        if (this.predictionChart) {
+            this.predictionChart.destroy();
+        }
+        
+        // Create new chart
+        this.predictionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Price ($)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: `📊 Multi-Item Price Forecast (${itemPredictions.size} items) - ${this.metadata?.display_name || 'PyTorch Model'}`
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            filter: function(item, chart) {
+                                // Group similar labels together for better readability
+                                return true;
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+    }
+
+    updateMultipleItemsModelInfo(itemCount) {
+        const modelDetails = document.getElementById('modelDetails');
+        
+        let modelName = 'PyTorch Model';
+        let modelArchitecture = 'LSTM';
+        let trainingInfo = 'Converted from PyTorch';
+        let totalParameters = 'N/A';
+        
+        if (this.metadata) {
+            modelName = this.metadata.display_name || this.metadata.model_name;
+            modelArchitecture = this.metadata.architecture_type;
+            if (this.metadata.training_info) {
+                trainingInfo = `Source: ${this.metadata.training_info.model_file}`;
+                totalParameters = this.metadata.training_info.total_parameters?.toLocaleString() || 'N/A';
+            }
+        }
+        
+        const selectedItemNames = Array.from(this.selectedFoodItems)
+            .map(code => this.scalers[code].name)
+            .sort()
+            .join(', ');
+        
+        modelDetails.innerHTML = `
+            <div class="model-detail-item">
+                <h4>Selected Food Items</h4>
+                <p>${selectedItemNames}</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Total Items</h4>
+                <p>${itemCount} items</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Selected Model</h4>
+                <p>${modelName}</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Model Architecture</h4>
+                <p>${modelArchitecture}</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Model Parameters</h4>
+                <p>${totalParameters}</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Prediction Horizon</h4>
+                <p>6 months ahead</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Features Used</h4>
+                <p>${this.metadata ? this.metadata.features.length : 9} engineered features</p>
+            </div>
+            <div class="model-detail-item">
+                <h4>Training Source</h4>
+                <p>${trainingInfo}</p>
+            </div>
+        `;
+    }
+
     updateModelInfo(foodItem) {
         const modelDetails = document.getElementById('modelDetails');
         const itemName = this.scalers[foodItem].name;
@@ -699,8 +1165,9 @@ class FoodPricePredictor {
 }
 
 // Initialize the application when DOM is loaded
+let foodPredictor;
 document.addEventListener('DOMContentLoaded', () => {
-    new FoodPricePredictor();
+    foodPredictor = new FoodPricePredictor();
 });
 
 // Utility functions
