@@ -20,9 +20,9 @@ def start_server():
             super().__init__(*args, directory='.', **kwargs)
     
     httpd = HTTPServer(server_address, MyHandler)
-    print(f"🌐 Server running at http://localhost:{port}")
-    print("📊 Food Price Predictor is ready!")
-    print("🔄 Press Ctrl+C to stop the server")
+    print(f"Server running at http://localhost:{port}")
+    print("Food Price Predictor is ready!")
+    print("Press Ctrl+C to stop the server")
     
     try:
         httpd.serve_forever()
@@ -32,17 +32,17 @@ def start_server():
 
 def main():
     """Main function"""
-    print("🚀 Starting Food Price Predictor Web Application")
+    print("Starting Food Price Predictor Web Application")
     print("=" * 60)
     
     # Check if model files exist
     if not os.path.exists('models/models_index.json'):
-        print("❌ Model files not found!")
-        print("💡 Please run: python create_models_from_pkl.py")
+        print("Model files not found!")
+        print("Please run: python create_models_from_pkl.py")
         return
     
-    print("✅ Model files found")
-    print("🏗️  Starting web server...")
+    print("Model files found")
+    print("Starting web server...")
     
     # Start server in a separate thread
     server_thread = threading.Thread(target=start_server)
@@ -55,10 +55,10 @@ def main():
     # Open browser automatically
     try:
         webbrowser.open('http://localhost:8000')
-        print("🌐 Opened application in your default browser")
+        print("Opened application in your default browser")
     except Exception as e:
-        print(f"⚠️  Could not open browser automatically: {e}")
-        print("🔗 Please visit: http://localhost:8000")
+        print(f"Could not open browser automatically: {e}")
+        print("Please visit: http://localhost:8000")
     
     # Keep the main thread alive
     try:

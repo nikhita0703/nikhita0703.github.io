@@ -26,11 +26,10 @@ class FoodPricePredictor {
         try {
             await this.loadModelsIndex();
             this.setupEventListeners();
-            this.generatePriceInputs();
-            this.updateModelStatus('loading', '🔄 Select a model to continue...');
+            this.updateModelStatus('loading', 'Select a model to continue...');
         } catch (error) {
             console.error('Error initializing:', error);
-            this.updateModelStatus('error', '❌ Failed to load models index');
+            this.updateModelStatus('error', 'Failed to load models index');
         }
     }
 
@@ -55,7 +54,7 @@ class FoodPricePredictor {
             
         } catch (error) {
             console.error('Error loading models index:', error);
-            this.updateModelStatus('error', '❌ Failed to load models index');
+            this.updateModelStatus('error', 'Failed to load models index');
         }
     }
     
@@ -73,12 +72,12 @@ class FoodPricePredictor {
 
     async loadSelectedModel() {
         if (!this.selectedModel) {
-            this.updateModelStatus('error', '❌ No model selected');
+            this.updateModelStatus('error', 'No model selected');
             return;
         }
         
         console.log(`Loading model: ${this.selectedModel}...`);
-        this.updateModelStatus('loading', '🔄 Loading selected model...');
+        this.updateModelStatus('loading', 'Loading selected model...');
         
         try {
             const modelFolder = `./models/${this.selectedModel}`;
@@ -98,6 +97,9 @@ class FoodPricePredictor {
             this.scalers = await scalersResponse.json();
             console.log('Scalers loaded:', this.scalers);
             
+            // Populate food items dropdown
+            this.populateFoodItems();
+            
             // Load prediction weights (simplified weights for inference)
             const weightsResponse = await fetch(`${modelFolder}/prediction_weights.json`);
             this.predictionWeights = await weightsResponse.json();
@@ -115,17 +117,37 @@ class FoodPricePredictor {
             }
             
             this.isLoaded = true;
-            this.updateModelStatus('ready', '✅ Model Ready');
+            this.updateModelStatus('ready', 'Model Ready');
             
         } catch (error) {
             console.error('Error loading selected model:', error);
-            this.updateModelStatus('error', '❌ Failed to load selected model');
+            this.updateModelStatus('error', 'Failed to load selected model');
             
             // Fallback to default data
             this.metadata = this.getDefaultMetadata();
             this.scalers = this.getDefaultScalers();
+            this.populateFoodItems();
             this.isLoaded = true;
         }
+    }
+    
+    populateFoodItems() {
+        const foodSelector = document.getElementById('foodItem');
+        foodSelector.innerHTML = '<option value="">Choose a food item...</option>';
+        
+        // Sort food items by name for better user experience
+        const sortedItems = Object.entries(this.scalers).sort((a, b) => 
+            a[1].name.localeCompare(b[1].name)
+        );
+        
+        sortedItems.forEach(([code, item]) => {
+            const option = document.createElement('option');
+            option.value = code;
+            option.textContent = `${item.name} (${item.data_points} data points)`;
+            foodSelector.appendChild(option);
+        });
+        
+        console.log(`Populated ${sortedItems.length} food items`);
     }
 
     getDefaultMetadata() {
@@ -201,7 +223,7 @@ class FoodPricePredictor {
                 await this.loadSelectedModel();
             } else {
                 this.isLoaded = false;
-                this.updateModelStatus('loading', '🔄 Select a model to continue...');
+                this.updateModelStatus('loading', 'Select a model to continue...');
             }
         });
 
@@ -210,76 +232,103 @@ class FoodPricePredictor {
             this.handleFoodItemChange(e.target.value);
         });
 
-        // Generate sample data
-        document.getElementById('generateSampleData').addEventListener('click', () => {
-            this.generateSampleData();
-        });
-
         // Predict button
         document.getElementById('predictBtn').addEventListener('click', () => {
             this.makePrediction();
         });
     }
 
-    generatePriceInputs() {
-        const priceGrid = document.getElementById('priceGrid');
-        priceGrid.innerHTML = '';
-
-        for (let i = 0; i < 18; i++) {
-            const monthsAgo = 18 - i;
-            const inputItem = document.createElement('div');
-            inputItem.className = 'price-input-item';
-            inputItem.innerHTML = `
-                <label for="price_${i}">${monthsAgo} months ago</label>
-                <input type="number" id="price_${i}" step="0.01" min="0" placeholder="$0.00">
-            `;
-            priceGrid.appendChild(inputItem);
+    displayHistoricalData(itemCode) {
+        const container = document.getElementById('historicalDataContainer');
+        const currentPriceDisplay = document.getElementById('currentPriceDisplay');
+        const predictBtn = document.getElementById('predictBtn');
+        
+        if (!itemCode || !this.scalers[itemCode]) {
+            container.innerHTML = '<p class="data-notice">Select a food item to view historical prices</p>';
+            currentPriceDisplay.style.display = 'none';
+            predictBtn.disabled = true;
+            return;
         }
+
+        const scaler = this.scalers[itemCode];
+        const historicalPrices = scaler.latest_18_months || [];
+        const historicalDates = scaler.latest_dates || [];
+        const currentPrice = scaler.current_price || scaler.mean;
+
+        if (historicalPrices.length === 0) {
+            container.innerHTML = '<p class="error-notice">No historical data available for this item</p>';
+            currentPriceDisplay.style.display = 'none';
+            predictBtn.disabled = true;
+            return;
+        }
+
+        // Create historical data table
+        let tableHTML = `
+            <div class="historical-table-container">
+                <table class="historical-data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Price</th>
+                            <th>Change</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        for (let i = 0; i < historicalPrices.length; i++) {
+            const price = historicalPrices[i];
+            const date = historicalDates[i];
+            const prevPrice = i > 0 ? historicalPrices[i-1] : price;
+            const change = i > 0 ? ((price - prevPrice) / prevPrice * 100) : 0;
+            const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
+            const changeSymbol = change > 0 ? '+' : '';
+
+            tableHTML += `
+                <tr>
+                    <td>${date}</td>
+                    <td>$${price.toFixed(2)}</td>
+                    <td class="change ${changeClass}">
+                        ${changeSymbol}${change.toFixed(1)}%
+                    </td>
+                </tr>
+            `;
+        }
+
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>
+            <div class="data-source">
+                <p><strong>Data Source:</strong> US Bureau of Labor Statistics (${scaler.series_id})</p>
+                <p><strong>Data Range:</strong> ${scaler.start_year} - ${scaler.end_year} (${scaler.data_points} total points)</p>
+            </div>
+        `;
+
+        container.innerHTML = tableHTML;
+
+        // Show current price
+        document.getElementById('latestPriceValue').textContent = `$${currentPrice.toFixed(2)}`;
+        document.getElementById('latestPriceDate').textContent = historicalDates[historicalDates.length - 1] || 'Latest';
+        currentPriceDisplay.style.display = 'block';
+
+        // Enable predict button
+        predictBtn.disabled = false;
+
+        console.log(`Displayed ${historicalPrices.length} months of historical data for ${scaler.name}`);
     }
 
     handleFoodItemChange(itemCode) {
         if (!itemCode || !this.scalers[itemCode]) return;
 
-        const scaler = this.scalers[itemCode];
-        const currentPriceInput = document.getElementById('currentPrice');
-        currentPriceInput.placeholder = `Enter price (range: $${scaler.min.toFixed(2)} - $${scaler.max.toFixed(2)})`;
-    }
-
-    generateSampleData() {
-        const foodItem = document.getElementById('foodItem').value;
-        if (!foodItem) {
-            alert('Please select a food item first');
-            return;
-        }
-
-        const scaler = this.scalers[foodItem];
-        const basePrice = (scaler.min + scaler.max) / 2;
-        const variation = (scaler.max - scaler.min) * 0.15;
-
-        // Generate realistic price history with trends
-        const prices = [];
-        let currentPrice = basePrice;
+        // Display the historical data for the selected food item
+        this.displayHistoricalData(itemCode);
         
-        for (let i = 0; i < 18; i++) {
-            // Add some random variation and seasonal patterns
-            const seasonalFactor = Math.sin(i * Math.PI / 6) * 0.08 + 1;
-            const randomFactor = (Math.random() - 0.5) * 0.15 + 1;
-            const trendFactor = 1 + (i * 0.003); // Small upward trend
-            
-            currentPrice = basePrice * seasonalFactor * randomFactor * trendFactor;
-            currentPrice = Math.max(scaler.min, Math.min(scaler.max, currentPrice));
-            prices.push(currentPrice);
-        }
-
-        // Fill in the price inputs
-        for (let i = 0; i < 18; i++) {
-            const priceInput = document.getElementById(`price_${i}`);
-            priceInput.value = prices[i].toFixed(2);
-        }
-
-        // Set current price
-        document.getElementById('currentPrice').value = prices[17].toFixed(2);
+        // Store the selected item for predictions
+        this.selectedFoodItem = itemCode;
     }
+
+
 
     createFeaturesFromPrices(prices, dates) {
         const features = [];
@@ -360,20 +409,20 @@ class FoodPricePredictor {
             return;
         }
 
-        // Collect price inputs
-        const prices = [];
-        for (let i = 0; i < 18; i++) {
-            const priceInput = document.getElementById(`price_${i}`);
-            const price = parseFloat(priceInput.value);
-            if (isNaN(price) || price <= 0) {
-                alert(`Please enter a valid price for ${18-i} months ago`);
-                return;
-            }
-            prices.push(price);
+        const scaler = this.scalers[foodItem];
+        if (!scaler || !scaler.latest_18_months || scaler.latest_18_months.length < 18) {
+            alert('Insufficient historical data for this food item. Please select another item.');
+            return;
         }
 
-        // Generate features
-        const features = this.createFeaturesFromPrices(prices, []);
+        // Use the loaded historical data
+        const prices = scaler.latest_18_months;
+        const dates = scaler.latest_dates;
+
+        console.log(`Making prediction for ${scaler.name} using ${prices.length} months of historical data`);
+
+        // Generate features from historical data
+        const features = this.createFeaturesFromPrices(prices, dates);
         
         // Make prediction using converted PyTorch model
         const predictions = this.pytorchModelPredict(features, foodItem);
@@ -387,8 +436,8 @@ class FoodPricePredictor {
         console.log(`Making prediction with ${this.metadata?.display_name || 'PyTorch model'}...`);
         
         const lastFeatures = features[features.length - 1];
-        const basePrice = parseFloat(document.getElementById('currentPrice').value || '0');
         const scaler = this.scalers[foodItem];
+        const basePrice = scaler.current_price || scaler.latest_18_months[scaler.latest_18_months.length - 1] || scaler.mean;
         
         const predictions = [];
         let currentPrice = basePrice;
@@ -587,7 +636,7 @@ class FoodPricePredictor {
                 plugins: {
                     title: {
                         display: true,
-                        text: `${this.scalers[foodItem].name} Price Forecast (${this.metadata?.display_name || 'PyTorch Model'})`
+                        text: `📊 ${this.scalers[foodItem].name} Price Forecast (${this.metadata?.display_name || 'PyTorch Model'})`
                     },
                     legend: {
                         display: true,
