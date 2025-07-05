@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Price Predictor - AI Ensemble Model</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍎 Food Price Predictor</h1>
+            <p>AI-powered price forecasting using ensemble LSTM models</p>
+        </header>
+
+        <div class="model-status" id="modelStatus">
+            <div class="status-indicator">
+                <div class="loading-spinner"></div>
+                <span>Loading AI Models...</span>
+            </div>
+        </div>
+
+        <main>
+            <section class="input-section">
+                <h2>📊 Price Input</h2>
+                <div class="form-group">
+                    <label for="foodItem">Select Food Item:</label>
+                    <select id="foodItem" class="form-control">
+                        <option value="">Choose a food item...</option>
+                        <option value="711211">Bananas</option>
+                        <option value="706111">Chicken (whole)</option>
+                        <option value="709112">Milk (gallon)</option>
+                        <option value="708111">Eggs (dozen)</option>
+                        <option value="702111">Bread (white)</option>
+                        <option value="704111">Bacon</option>
+                        <option value="703111">Ground Beef</option>
+                        <option value="711311">Oranges</option>
+                        <option value="712112">Potatoes</option>
+                        <option value="717311">Coffee</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="priceHistory">Price History (18 months):</label>
+                    <div class="price-input-grid" id="priceGrid">
+                        <!-- Price inputs will be generated here -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="currentPrice">Current Price ($):</label>
+                    <input type="number" id="currentPrice" class="form-control" step="0.01" min="0" placeholder="Enter current price">
+                </div>
+
+                <div class="button-group">
+                    <button id="generateSampleData" class="btn btn-secondary">Generate Sample Data</button>
+                    <button id="predictBtn" class="btn btn-primary">🔮 Predict Prices</button>
+                </div>
+            </section>
+
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <h2>📈 Prediction Results</h2>
+                
+                <div class="prediction-cards">
+                    <div class="prediction-card">
+                        <h3>Next 6 Months</h3>
+                        <div class="prediction-list" id="predictionList"></div>
+                    </div>
+                    
+                    <div class="prediction-card">
+                        <h3>Price Trend</h3>
+                        <div class="trend-indicator" id="trendIndicator"></div>
+                        <div class="trend-summary" id="trendSummary"></div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="predictionChart" width="800" height="400"></canvas>
+                </div>
+
+                <div class="model-info">
+                    <h3>🤖 Model Information</h3>
+                    <div class="model-details" id="modelDetails"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Food Price Predictor - Powered by TensorFlow.js & Ensemble Learning</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="assets/app.js"></script>
+</body>
+</html> 
